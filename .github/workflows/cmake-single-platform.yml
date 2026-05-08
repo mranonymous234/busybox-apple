@@ -1,4 +1,4 @@
-name: Build BusyBox dylib for iOS
+name: Build Minimal BusyBox (iOS ARM64)
 
 on:
   workflow_dispatch:
@@ -14,40 +14,77 @@ jobs:
           repository: xerub/busybox-apple
           path: busybox
 
-      - name: Configure SDK
+      - name: Setup SDK
         run: |
           echo "SDK=$(xcrun --sdk iphoneos --show-sdk-path)" >> $GITHUB_ENV
 
-      - name: Configure BusyBox
+      - name: Clean config
         working-directory: busybox
         run: |
+          make distclean || true
           make defconfig
 
-      - name: Build object files
+      - name: Enable only required applets
         working-directory: busybox
         run: |
-          make CC=clang \
+          cat > .config << 'EOF'
+          CONFIG_STATIC=y
+          CONFIG_FEATURE_SH_STANDALONE=y
+
+          CONFIG_LS=y
+          CONFIG_CAT=y
+          CONFIG_ECHO=y
+          CONFIG_GREP=y
+          CONFIG_PWD=y
+          CONFIG_MKDIR=y
+          CONFIG_RM=y
+          CONFIG_TOUCH=y
+          CONFIG_CP=y
+          CONFIG_MV=y
+          CONFIG_FIND=y
+
+          # disable everything else
+          CONFIG_LOGIN=n
+          CONFIG_SU=n
+          CONFIG_WHO=n
+          CONFIG_LAST=n
+          CONFIG_WALL=n
+          CONFIG_INIT=n
+          CONFIG_ASH=n
+          CONFIG_SH_IS_ASH=n
+          EOF
+
+      - name: Build BusyBox
+        working-directory: busybox
+        run: |
+          make oldconfig
+          make -j$(sysctl -n hw.ncpu) \
+            CC=clang \
             CFLAGS="-arch arm64 -isysroot $SDK -miphoneos-version-min=15.0 -fPIC"
 
-      - name: Link dylib
+      - name: Link executable (not dylib)
         working-directory: busybox
         run: |
           clang \
-            -dynamiclib \
             -arch arm64 \
             -isysroot "$SDK" \
             -miphoneos-version-min=15.0 \
-            -o libbusybox.dylib \
-            $(find . -name '*.o')
+            -o busybox \
+            $(find . -name "*.o")
 
-      - name: Verify dylib
+      - name: Strip binary
         working-directory: busybox
         run: |
-          file libbusybox.dylib
-          otool -L libbusybox.dylib
+          strip busybox || true
 
-      - name: Upload dylib
+      - name: Verify
+        working-directory: busybox
+        run: |
+          file busybox
+          otool -L busybox
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: busybox-dylib
-          path: busybox/libbusybox.dylib
+          name: busybox-minimal-ios
+          path: busybox/busybox
