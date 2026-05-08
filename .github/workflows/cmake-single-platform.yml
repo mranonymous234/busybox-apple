@@ -1,4 +1,4 @@
-name: Build BusyBox minimal dylib-ready tools
+name: Build BusyBox minimal
 
 on:
   workflow_dispatch:
@@ -17,46 +17,32 @@ jobs:
           cd busybox
           make defconfig
 
-      - name: Inject minimal .config (no interactive tools)
+      - name: Create minimal config
         run: |
           cd busybox
 
-          cat > .config << 'EOF'
-CONFIG_STATIC=y
+          printf '%s\n' \
+"CONFIG_STATIC=y" \
+"CONFIG_CAT=y" \
+"CONFIG_LS=y" \
+"CONFIG_ECHO=y" \
+"CONFIG_GREP=y" \
+"CONFIG_PWD=y" \
+"CONFIG_MKDIR=y" \
+"CONFIG_RM=y" \
+"CONFIG_TOUCH=y" \
+"CONFIG_CP=y" \
+"CONFIG_MV=y" \
+"CONFIG_FIND=y" \
+"CONFIG_FEATURE_UTMP=n" \
+"CONFIG_FEATURE_WTMP=n" \
+"CONFIG_FEATURE_SUID=n" \
+"CONFIG_PAM=n" \
+"CONFIG_DESKTOP=n" \
+"CONFIG_EXTRA_COMPAT=n" \
+> .config
 
-# Core utilities only
-CONFIG_CAT=y
-CONFIG_LS=y
-CONFIG_ECHO=y
-CONFIG_GREP=y
-CONFIG_PWD=y
-CONFIG_MKDIR=y
-CONFIG_RM=y
-CONFIG_TOUCH=y
-CONFIG_CP=y
-CONFIG_MV=y
-CONFIG_FIND=y
-
-# Disable login/system stuff (fix macOS/Linux portability issues)
-CONFIG_FEATURE_UTMP=n
-CONFIG_FEATURE_WTMP=n
-CONFIG_FEATURE_SUID=n
-CONFIG_PAM=n
-CONFIG_LOGIN=n
-
-# Reduce noise / system dependencies
-CONFIG_DESKTOP=n
-CONFIG_EXTRA_COMPAT=n
-CONFIG_LONG_OPTS=y
-
-# Shell minimal
-CONFIG_SH_IS_ASH=y
-CONFIG_ASH=y
-CONFIG_BASH_IS_NONE=y
-
-EOF
-
-      - name: Prepare config
+      - name: Build config (non-interactive)
         run: |
           cd busybox
           yes "" | make oldconfig || true
@@ -66,7 +52,7 @@ EOF
           cd busybox
           make -j$(sysctl -n hw.ncpu)
 
-      - name: Check output
+      - name: Output check
         run: |
           cd busybox
           ls -la busybox
