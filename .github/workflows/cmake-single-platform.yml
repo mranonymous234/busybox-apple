@@ -1,0 +1,53 @@
+name: Build BusyBox dylib for iOS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout BusyBox
+        uses: actions/checkout@v4
+        with:
+          repository: xerub/busybox-apple
+          path: busybox
+
+      - name: Configure SDK
+        run: |
+          echo "SDK=$(xcrun --sdk iphoneos --show-sdk-path)" >> $GITHUB_ENV
+
+      - name: Configure BusyBox
+        working-directory: busybox
+        run: |
+          make defconfig
+
+      - name: Build object files
+        working-directory: busybox
+        run: |
+          make CC=clang \
+            CFLAGS="-arch arm64 -isysroot $SDK -miphoneos-version-min=15.0 -fPIC"
+
+      - name: Link dylib
+        working-directory: busybox
+        run: |
+          clang \
+            -dynamiclib \
+            -arch arm64 \
+            -isysroot "$SDK" \
+            -miphoneos-version-min=15.0 \
+            -o libbusybox.dylib \
+            $(find . -name '*.o')
+
+      - name: Verify dylib
+        working-directory: busybox
+        run: |
+          file libbusybox.dylib
+          otool -L libbusybox.dylib
+
+      - name: Upload dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: busybox-dylib
+          path: busybox/libbusybox.dylib
