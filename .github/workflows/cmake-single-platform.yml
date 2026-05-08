@@ -1,11 +1,9 @@
 - name: Configure BusyBox
   run: |
     cd busybox
-
     make defconfig
 
     cat >> .config << 'EOF'
-
 CONFIG_STATIC=y
 
 # Core tools only
@@ -21,9 +19,8 @@ CONFIG_CP=y
 CONFIG_MV=y
 CONFIG_FIND=y
 
-# Disable system login stuff (fixes utmp.h issues)
+# Disable system login stuff (fix utmp.h issues)
 CONFIG_FEATURE_UTMP=n
 CONFIG_FEATURE_WTMP=n
 CONFIG_FEATURE_SUID=n
-
 EOF
