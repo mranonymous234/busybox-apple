@@ -1,4 +1,4 @@
-name: Build BusyBox iOS
+name: Build iOS BusyBox (arm64)
 
 on:
   workflow_dispatch:
@@ -8,63 +8,65 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          brew install make
+    - name: Install tools
+      run: |
+        brew install make
 
-      - name: Clone BusyBox
-        run: |
-          git clone git://busybox.net/busybox.git
-          cd busybox
-          git checkout 1_36_1
+    - name: Download BusyBox
+      run: |
+        curl -LO https://busybox.net/downloads/busybox-1.36.1.tar.bz2
+        tar -xf busybox-1.36.1.tar.bz2
+        mv busybox-1.36.1 busybox
 
-      - name: Configure minimal iOS build
-        run: |
-          cd busybox
+    - name: Create minimal config
+      run: |
+        cd busybox
 
-          make defconfig
+        make defconfig
 
-          # Force static build
-          sed -i '' 's/.*CONFIG_STATIC.*/CONFIG_STATIC=y/' .config
+        # minimal tools only
+        scripts/config --enable CAT
+        scripts/config --enable LS
+        scripts/config --enable ECHO
+        scripts/config --enable GREP
+        scripts/config --enable PWD
+        scripts/config --enable MKDIR
+        scripts/config --enable RM
+        scripts/config --enable TOUCH
+        scripts/config --enable CP
+        scripts/config --enable MV
+        scripts/config --enable FIND
 
-          # Core utilities only
-          echo "CONFIG_LS=y" >> .config
-          echo "CONFIG_CAT=y" >> .config
-          echo "CONFIG_ECHO=y" >> .config
-          echo "CONFIG_GREP=y" >> .config
-          echo "CONFIG_PWD=y" >> .config
-          echo "CONFIG_MKDIR=y" >> .config
-          echo "CONFIG_RM=y" >> .config
-          echo "CONFIG_CP=y" >> .config
-          echo "CONFIG_MV=y" >> .config
-          echo "CONFIG_TOUCH=y" >> .config
-          echo "CONFIG_FIND=y" >> .config
+        # IMPORTANT: disable utmp/wtmp (macOS + iOS safe)
+        scripts/config --disable FEATURE_UTMP || true
+        scripts/config --disable FEATURE_WTMP || true
 
-          # ❌ Fix your utmp.h error (IMPORTANT)
-          echo "# CONFIG_FEATURE_UTMP is not set" >> .config
-          echo "# CONFIG_FEATURE_WTMP is not set" >> .config
+        # static build
+        scripts/config --enable STATIC
 
-          # Remove Linux-only subsystems
-          echo "# CONFIG_LOGIN is not set" >> .config
-          echo "# CONFIG_SU is not set" >> .config
-          echo "# CONFIG_CROND is not set" >> .config
-          echo "# CONFIG_INIT is not set" >> .config
+    - name: Build for iOS (arm64)
+      run: |
+        cd busybox
 
-      - name: Build BusyBox
-        run: |
-          cd busybox
+        export SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+        export CC=$(xcrun --sdk iphoneos -f clang)
 
-          make clean
-          make -j$(sysctl -n hw.ncpu) \
-            CROSS_COMPILE="" \
-            CC="clang" \
-            CFLAGS="-isysroot $(xcrun --sdk iphoneos --show-sdk-path) -arch arm64"
+        make clean || true
 
-      - name: Upload binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: busybox-ios
-          path: busybox/busybox
+        make -j$(sysctl -n hw.ncpu) \
+          CC="$CC" \
+          CFLAGS="--target=arm64-apple-ios -isysroot $SDK -O2" \
+          LDFLAGS="--target=arm64-apple-ios -isysroot $SDK"
+
+    - name: Strip binary
+      run: |
+        strip busybox/busybox || true
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: busybox-ios-arm64
+        path: busybox/busybox
