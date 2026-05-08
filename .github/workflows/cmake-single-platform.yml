@@ -1,12 +1,30 @@
-- name: Configure BusyBox
-  run: |
-    cd busybox
-    make defconfig
+name: Build BusyBox minimal dylib-ready tools
 
-    cat >> .config << 'EOF'
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Clone BusyBox
+        run: |
+          git clone https://git.busybox.net/busybox
+          cd busybox
+          make defconfig
+
+      - name: Inject minimal .config (no interactive tools)
+        run: |
+          cd busybox
+
+          cat > .config << 'EOF'
 CONFIG_STATIC=y
 
-# Core tools only
+# Core utilities only
 CONFIG_CAT=y
 CONFIG_LS=y
 CONFIG_ECHO=y
@@ -19,8 +37,36 @@ CONFIG_CP=y
 CONFIG_MV=y
 CONFIG_FIND=y
 
-# Disable login/system features
+# Disable login/system stuff (fix macOS/Linux portability issues)
 CONFIG_FEATURE_UTMP=n
 CONFIG_FEATURE_WTMP=n
 CONFIG_FEATURE_SUID=n
+CONFIG_PAM=n
+CONFIG_LOGIN=n
+
+# Reduce noise / system dependencies
+CONFIG_DESKTOP=n
+CONFIG_EXTRA_COMPAT=n
+CONFIG_LONG_OPTS=y
+
+# Shell minimal
+CONFIG_SH_IS_ASH=y
+CONFIG_ASH=y
+CONFIG_BASH_IS_NONE=y
+
 EOF
+
+      - name: Prepare config
+        run: |
+          cd busybox
+          yes "" | make oldconfig || true
+
+      - name: Build BusyBox
+        run: |
+          cd busybox
+          make -j$(sysctl -n hw.ncpu)
+
+      - name: Check output
+        run: |
+          cd busybox
+          ls -la busybox
